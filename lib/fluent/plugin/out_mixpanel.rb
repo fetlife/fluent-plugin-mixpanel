@@ -111,7 +111,7 @@ class Fluent::MixpanelOutput < Fluent::BufferedOutput
       prop.select! {|key, _| !key.start_with?('mp_') }
       prop.merge!(
         'time' => record['time'] || time.to_i,
-        'fl_fluent_ts' => (Time.zone.now.to_f * 1_000_000).to_i,  # Same format as fetlife-web Timestamp
+        'fl_fluent_ts' => (Time.now.utc.to_f * 1_000_000).to_i,  # Same format as fetlife-web Timestamp
       )
 
       records << data
