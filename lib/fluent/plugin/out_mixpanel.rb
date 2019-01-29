@@ -48,12 +48,12 @@ class Fluent::MixpanelOutput < Fluent::BufferedOutput
 
   def start
     super
-    error_handler = Fluent::MixpanelOutputErrorHandler.new(log)
   end
 
   def build_mixpanel_connection
     result = {}
 
+    error_handler = Fluent::MixpanelOutputErrorHandler.new(log)
     if @batch_to_mixpanel
       result[:batched_consumer] = Mixpanel::BufferedConsumer.new
       result[:tracker] = Mixpanel::Tracker.new(@project_token, error_handler) do |type, message|
