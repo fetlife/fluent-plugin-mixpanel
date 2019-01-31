@@ -1,3 +1,4 @@
+require "ostruct"
 require_relative "mixpanel_ruby_error_handler.rb"
 
 class Fluent::MixpanelOutput < Fluent::BufferedOutput
@@ -47,15 +48,22 @@ class Fluent::MixpanelOutput < Fluent::BufferedOutput
 
   def start
     super
+  end
+
+  def build_mixpanel_connection
+    result = {}
+
     error_handler = Fluent::MixpanelOutputErrorHandler.new(log)
     if @batch_to_mixpanel
-      @batched_consumer = Mixpanel::BufferedConsumer.new
-      @tracker = Mixpanel::Tracker.new(@project_token, error_handler) do |type, message|
-          @batched_consumer.send!(type, message)
+      result[:batched_consumer] = Mixpanel::BufferedConsumer.new
+      result[:tracker] = Mixpanel::Tracker.new(@project_token, error_handler) do |type, message|
+          result[:batched_consumer].send!(type, message)
       end
     else
-      @tracker = Mixpanel::Tracker.new(@project_token, error_handler)
+      result[:tracker] = Mixpanel::Tracker.new(@project_token, error_handler)
     end
+
+    OpenStruct.new(result)
   end
 
   def shutdown
@@ -122,30 +130,31 @@ class Fluent::MixpanelOutput < Fluent::BufferedOutput
 
   def send_to_mixpanel(records)
     log.debug("sending #{records.length} to mixpanel")
+    mixpanel = build_mixpanel_connection
 
     records.each do |record|
       success = true
 
       if @use_import
-        success = @tracker.import(@api_key, record['distinct_id'], record['event'], record['properties'])
+        success = mixpanel.tracker.import(@api_key, record['distinct_id'], record['event'], record['properties'])
       else
         event_type = record[@event_type_key]
         success =
           case event_type
           when 'profile_update'
-            @tracker.people.set(record['distinct_id'], record['properties'], record['properties']['ip'])
+            mixpanel.tracker.people.set(record['distinct_id'], record['properties'], record['properties']['ip'])
           when 'profile_inc'
             properties = record['properties'].dup
             properties.delete('ip')
             properties.delete('time')
-            @tracker.people.increment(
+            mixpanel.tracker.people.increment(
               record['distinct_id'],
               properties,
               record['properties']['ip'],
               '$ignore_time' => 'true'
             )
           else # assuming default type 'event'
-            @tracker.track(record['distinct_id'], record['event'], record['properties'])
+            mixpanel.tracker.track(record['distinct_id'], record['event'], record['properties'])
           end
       end
 
@@ -159,8 +168,8 @@ class Fluent::MixpanelOutput < Fluent::BufferedOutput
         end
       end
     end
-    if(@batch_to_mixpanel)
-      @batched_consumer.flush
+    if(mixpanel.batched_consumer)
+      mixpanel.batched_consumer.flush
     end
   end
 end
